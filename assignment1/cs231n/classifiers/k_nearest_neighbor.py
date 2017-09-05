@@ -70,7 +70,7 @@ class KNearestNeighbor(object):
       sub = num_train - cur_img #将所有的图片减去当前计算的图片
       power = np.power(sub, 2)
       dis = np.squar(np.sum(power, axis=1))
-      dists[i] = dis
+      dists[i] = dis.reshape(1,-1)
       #for j in xrange(num_train):
         #####################################################################
         # TODO:                                                             #
