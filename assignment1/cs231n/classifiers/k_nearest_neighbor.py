@@ -130,6 +130,13 @@ class KNearestNeighbor(object):
     #       and two broadcast sums.                                         #
     #########################################################################
     pass
+    #(x-y)^2 = x^2 + y^2 - 2xy
+    twoxy = np.multiply(np.dot(X, self.X_train.T), -2)
+    X_square = np.sum(np.square(X), axis=1, keepdims=True)
+    X_train_square = np.sum(np.square(self.X_train), axis=1)
+    dists = np.add(dists, X_square)
+    dists = np.add(dists, X_train_square)
+    dists = np.add(dists, twoxy)
     #########################################################################
     #                         END OF YOUR CODE                              #
     #########################################################################
@@ -161,6 +168,8 @@ class KNearestNeighbor(object):
       # neighbors. Store these labels in closest_y.                           #
       # Hint: Look up the function numpy.argsort.                             #
       #########################################################################
+      min_to_max_index_sort = np.argsort(dists[i])
+      closest_y = self.y_train[min_to_max_index_sort[0:k]]
       pass
       #########################################################################
       # TODO:                                                                 #
@@ -170,6 +179,7 @@ class KNearestNeighbor(object):
       # label.                                                                #
       #########################################################################
       pass
+      y_pred[i] = np.argmax(np.bincount(closest_y))
       #########################################################################
       #                           END OF YOUR CODE                            # 
       #########################################################################
