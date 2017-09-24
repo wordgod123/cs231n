@@ -48,6 +48,10 @@ class TwoLayerNet(object):
         # and biases using the keys 'W2' and 'b2'.                                 #
         ############################################################################
         pass
+        self.params["W1"] = weight_scale * np.random.randn(input_dim, hidden_dim)
+        self.params["W2"] = weight_scale * np.random.randn(hidden_dim, num_classes)
+        self.params["b1"] = np.zeros(hidden_dim)
+        self.params["b2"] = np.zeros(num_classes)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -78,6 +82,14 @@ class TwoLayerNet(object):
         # class scores for X and storing them in the scores variable.              #
         ############################################################################
         pass
+        W1 = self.params["W1"] #D, H
+        b1 = self.params["b1"] 
+        W2 = self.params["W2"] #H, C
+        b2 = self.params["b2"]
+        
+        z1 = np.dot(X, W1) + b1 #N, H
+        a1 = np.maximum(0, z1) #N, H
+        scores = np.dot(a1, W2) + b2 #N, C
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -97,6 +109,32 @@ class TwoLayerNet(object):
         # automated tests, make sure that your L2 regularization includes a factor #
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
+        N = X.shape[0]
+        scores_min = scores - np.max(scores, axis=1, keepdims=True)
+        scores_exp = np.exp(scores_min)
+        scores_prob = scores_exp / np.sum(scores_exp, axis=1, keepdims=True)
+        scores_correct = scores_prob[np.arange(N), y]
+        loss = - np.sum(np.log(scores_correct)) / N
+        loss += 0.5 * self.reg * (np.sum(W1*W1) + np.sum(W2*W2))
+        
+        dscore = scores_prob.copy() #N, C
+        dscore[np.arange(N), y] -= 1
+        dW2 = np.dot(a1.T, dscore) #H, C
+        dW2 += self.reg * W2
+        db2 = np.sum(dscore, axis=0)
+        db2 += self.reg * b2
+        da1 = np.dot(dscore, W2.T) #N, H
+        dz1 = a1 > 0
+        dz1 = dz1 * da1 # N, H
+        dW1 = np.dot(X.T, dz1)
+        dW1 += self.reg * W1
+        db1 = np.sum(dz1, axis=0)
+        db1 += self.reg * b1
+        
+        grads["W1"] = dW1
+        grads["W2"] = dW2
+        grads["b1"] = db1
+        grads["b2"] = db2
         pass
         ############################################################################
         #                             END OF YOUR CODE                             #
