@@ -161,6 +161,12 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     N, D = x.shape
     running_mean = bn_param.get('running_mean', np.zeros(D, dtype=x.dtype))
     running_var = bn_param.get('running_var', np.zeros(D, dtype=x.dtype))
+    
+    batch_mean = np.mean(x, axis=0)
+    batch_var = np.var(x, axis=0)
+    running_mean = momentum * running_mean + (1 - momentum) * batch_mean
+    running_var = momentum * running_var + (1 - momentum) * batch_var
+    batch_var += eps
 
     out, cache = None, None
     if mode == 'train':
@@ -179,14 +185,18 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # variance, storing your result in the running_mean and running_var   #
         # variables.                                                          #
         #######################################################################
-        mean = np.sum(x , axis=0) / N
-        var = np.std(x, axis=0) / N
-        x = (x - mean) / (var + eps)
-        out = gamma * x + beta
-        cache = (x, gamma)
+        #mean = np.mean(x , axis=0)
+        #var = np.var(x, axis=0)
+        #x = (x - mean) / np.sqrt(var+eps)
+        #out = gamma * x + beta
+        #cache = (x, gamma, var, mean, eps)
         
-        running_mean = momentum * running_mean + (1 - momentum) * mean
-        running_var = momentum * running_var + (1 - momentum) * var
+        #running_mean = momentum * running_mean + (1 - momentum) * mean
+        #running_var = momentum * running_var + (1 - momentum) * var
+        
+        batch_norm_x = np.divide((x - batch_mean), np.sqrt(batch_var + eps))
+        out = np.multiply(gamma, batch_norm_x) + beta
+        cache = (x, batch_norm_x, batch_mean, batch_var, gamma, beta, bn_param)
         pass
         #######################################################################
         #                           END OF YOUR CODE                          #
@@ -236,17 +246,44 @@ def batchnorm_backward(dout, cache):
     # TODO: Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
     ###########################################################################
-    orig_x, gamma = cache
-    dgamma = dout * orig_x
-    dgamma = dgamma[0]
-    dx = dout * gamma
-    dbeta = np.sum(dout, axis=0) / N
+    #x, gamma, batch_var, batch_mean, eps = cache
+    #batch_var += eps
+    #dgamma = np.sum(dout * x, axis=0)
+    #dbeta = np.mean(dout, axis=0)
+    N = np.shape(dout)[0]
+    ##dx = dout * gamma
+    ##dx /= var
+    #dx = (gamma * ((batch_var) ** -0.5) / N) * ((N * dout) - dout.sum(axis=0) -
+    #                                            (((x - batch_mean) * np.power(batch_var, -1)) *
+    #                                             (dout * (x - batch_mean)).sum(axis=0)))
+    
+    x, batch_norm_x, batch_mean, batch_var, gamma, beta, bn_param = cache
+    eps = bn_param.get('eps', 1e-5)
+    dgamma = np.multiply(batch_norm_x, dout).sum(axis=0)
+    dbeta = dout.sum(axis=0)
+    batch_var += eps
+    dx = (gamma * ((batch_var) ** -0.5) / N) * ((N * dout) - dout.sum(axis=0) -
+                                                (((x - batch_mean) * np.power(batch_var, -1)) *
+                                                 (dout * (x - batch_mean)).sum(axis=0)))
     pass
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
 
     return dx, dgamma, dbeta
+
+def affine_bn_relu_forward(X, W, b, gamma, beta, bn_params):
+    z, cache1 = affine_forward(X, W, b)
+    norm_z, cache2 = batchnorm_forward(z, gamma, beta, bn_params)
+    out, cache3 = relu_forward(norm_z)
+    caches = [cache1, cache2, cache3]
+    return out, caches
+
+def affine_bn_relu_backword(dout, cache):
+    dx = relu_backward(dout, cache[2])
+    dx, dgamma, dbeta = batchnorm_backward(dx, cache[1])
+    dx, dW, db = affine_backward(dx, cache[0])
+    return dx, dW, db, dgamma, dbeta
 
 
 def batchnorm_backward_alt(dout, cache):
@@ -272,6 +309,10 @@ def batchnorm_backward_alt(dout, cache):
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
     pass
+    #x_minus_mean = x - batch_mean
+    #dx = (gamma * (batch_var ** -0.5) / N) * ((N * dout) - dout.sum(axis=0) -
+    #                                          (((x_minus_mean) * (batch_var ** -1)) *
+    #                                           (dout * (x_minus_mean)).sum(axis=0)))
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -527,6 +568,7 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # version of batch normalization defined above. Your implementation should#
     # be very short; ours is less than five lines.                            #
     ###########################################################################
+    #out, cache = batchnorm_forward(x, gamma, beta, bn_param)
     pass
     ###########################################################################
     #                             END OF YOUR CODE                            #
