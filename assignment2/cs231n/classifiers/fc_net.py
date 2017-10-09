@@ -258,12 +258,8 @@ class FullyConnectedNet(object):
                 scores, cache = affine_forward(input_data, self.params["W"+str(i+1)], self.params["b"+str(i+1)])
                 caches.append([cache,])
             else:
-                if self.use_batchnorm:
-                    input_data, cache = affine_bn_relu_forward(input_data, self.params["W"+str(i+1)], self.params["b"+str(i+1)], self.params["gamma"+str(i+1)], self.params["beta"+str(i+1)], self.bn_params[i])
-                    caches.append(cache)
-                else:
-                    input_data, cache = affine_relu_forward(input_data, self.params["W"+str(i+1)], self.params["b"+str(i+1)])
-                    caches.append(cache)
+                input_data, cache = affine_bn_relu_dropout_forward(input_data, self.params, i, self.bn_params[i] if len(self.bn_params)>i else None, self.use_dropout, self.dropout_param, self.use_batchnorm)
+                caches.append(cache)
         pass
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -298,14 +294,12 @@ class FullyConnectedNet(object):
             if i == self.num_layers:
                 dx, dW, db = affine_backward(dout, caches[i-1][0])
             else:
+                dx, dW, db, dgamma, dbeta = affine_bn_relu_dropout_backword(dout, caches[i-1], self.use_dropout, self.use_batchnorm)
                 if self.use_batchnorm:
-                    dx, dW, db, dgamma, dbeta = affine_bn_relu_backword(dout, caches[i-1])
                     grads["gamma"+str(i)] = dgamma
                     grads["beta"+str(i)] = dbeta
-                else:
-                    dx, dW, db = affine_relu_backward(dout, caches[i-1])
             dout = dx
-            grads["W"+str(i)] = dW + self.reg * caches[i-1][0][1]
+            grads["W"+str(i)] = dW + self.reg * caches[i-1][0][1] 
             grads["b"+str(i)] = db
         pass
         ############################################################################

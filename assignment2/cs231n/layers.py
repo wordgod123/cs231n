@@ -166,7 +166,6 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     batch_var = np.var(x, axis=0)
     running_mean = momentum * running_mean + (1 - momentum) * batch_mean
     running_var = momentum * running_var + (1 - momentum) * batch_var
-    batch_var += eps
 
     out, cache = None, None
     if mode == 'train':
@@ -209,7 +208,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # Store the result in the out variable.                               #
         #######################################################################
         pass
-        x = (x - running_mean) / (running_var + eps)
+        x = (x - running_mean) / np.sqrt(running_var + eps)
         out = gamma * x + beta
         #######################################################################
         #                          END OF YOUR CODE                           #
@@ -272,17 +271,34 @@ def batchnorm_backward(dout, cache):
 
     return dx, dgamma, dbeta
 
-def affine_bn_relu_forward(X, W, b, gamma, beta, bn_params):
+def affine_bn_relu_dropout_forward(X, params, i, bn_params, use_dropout, dropout_param, use_batchnorm):
+    W = params["W"+str(i+1)]
+    b = params["b"+str(i+1)]
+    if use_batchnorm:
+        gamma = params["gamma"+str(i+1)]
+        beta = params["beta"+str(i+1)]
+    caches = []
     z, cache1 = affine_forward(X, W, b)
-    norm_z, cache2 = batchnorm_forward(z, gamma, beta, bn_params)
-    out, cache3 = relu_forward(norm_z)
-    caches = [cache1, cache2, cache3]
+    caches.append(cache1)
+    if use_batchnorm:
+        z, cache2 = batchnorm_forward(z, gamma, beta, bn_params)
+        caches.append(cache2)
+    out, cache3 = relu_forward(z)
+    caches.append(cache3)
+    if use_dropout:
+        out, cache_dropout = dropout_forward(out, dropout_param)
+        caches.append(cache_dropout)
     return out, caches
 
-def affine_bn_relu_backword(dout, cache):
-    dx = relu_backward(dout, cache[2])
-    dx, dgamma, dbeta = batchnorm_backward(dx, cache[1])
-    dx, dW, db = affine_backward(dx, cache[0])
+def affine_bn_relu_dropout_backword(dout, cache, use_dropout, use_batchnorm):
+    dgamma, dbeta = None, None
+    caches = cache.copy()
+    if use_dropout:
+        dout = dropout_backward(dout, caches.pop())
+    dx = relu_backward(dout, caches.pop())
+    if use_batchnorm:
+        dx, dgamma, dbeta = batchnorm_backward(dx,caches.pop())
+    dx, dW, db = affine_backward(dx, caches.pop())
     return dx, dW, db, dgamma, dbeta
 
 
@@ -432,16 +448,22 @@ def conv_forward_naive(x, w, b, conv_param):
     pad = conv_param.get('pad')
     N, C, H, W = x.shape
     F, C, HH, WW = w.shape
-    H_pie = 1 + (H + 2 * pad - HH) / stride
-    W_pie = 1 + (W + 2 * pad - WW) / stride
+    H_pie = 1 + (H + 2 * pad - HH) // stride
+    W_pie = 1 + (W + 2 * pad - WW) // stride
     out = np.zeros((N, F, H_pie, W_pie))
     
-    x = np.pad(x,(pad,pad),mode="constant", constant_values=0)[pad:pad+N,:]
+    x_pad = np.pad(x,((0,),(0,),(pad,),(pad,)),mode="constant", constant_values=0)
+    #print(x.shape)
+    #print(w.shape)
+    #print(stride,pad)
+    #print(H_pie, W_pie)
     for h in range(H_pie):
-        for w in range(W_pie):
-            for f in rang(F):
-                x_input = x[:, :, h*stride:(h+1)*stride, w*stride:(w+1)*stride]
-                out[:,f,h,w] = np.sum( x_input * w[f] + b[f], axis=0)
+        for w_pie in range(W_pie):
+            for f in range(F):
+                for i in range(N):
+                    x_input = x_pad[i, :, (h*stride):(h*stride+HH), (w_pie*stride):(w_pie*stride+WW)]
+                    #print(x_input.shape)
+                    out[i,f,h,w_pie] = np.sum( x_input * w[f]) + b[f]
     pass
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -472,14 +494,30 @@ def conv_backward_naive(dout, cache):
     pad = conv_param.get('pad')
     N, C, H, W = x.shape
     F, C, HH, WW = w.shape
-    H_pie = 1 + (H + 2 * pad - HH) / stride
-    W_pie = 1 + (W + 2 * pad - WW) / stride
+    N, F, H_pie, W_pie = dout.shape
     
+    x_pad = np.pad(x,((0,),(0,),(pad,),(pad,)),mode="constant", constant_values=0)
+    dw = np.zeros(w.shape)
+    db = np.zeros(F)
+    dx = np.zeros(x_pad.shape)
+    #print(H_pie,W_pie)
     for h in range(H_pie):
-        for w in range(W_pie):
-            for f in rang(F):
-                x_input = x[:, :, h*stride:(h+1)*stride, w*stride:(w+1)*stride]
-                out[:,f,h,w] = np.sum( x_input * w[f] + b[f], axis=0)
+        for w_pie in range(W_pie):
+            for f in range(F):
+                for i in range(N):
+                    x_input = x_pad[i, :, h*stride:h*stride+HH, w_pie*stride:w_pie*stride+WW]
+                    dx_tmp = dout[i,f,h,w_pie]* w[f]
+                    dx[i, :, h*stride:h*stride+HH, w_pie*stride:w_pie*stride+WW] += dx_tmp
+    for h in range(H_pie):
+        for w_pie in range(W_pie):
+            for f in range(F):
+                for c in range(C):
+                    sub_xpad = x_pad[:, c, h*stride:h*stride+HH, w_pie*stride:w_pie*stride+WW]
+                    dw[f, c, h, w_pie] += dout[:,c,:,:] * sub_xpad
+    for f in range(F):
+        db[f] += np.sum(dout[f])
+    N, C, H, W = x_pad.shape
+    dx = dx[:,:,pad:H-pad, pad:W-pad]
     
     pass
     ###########################################################################
