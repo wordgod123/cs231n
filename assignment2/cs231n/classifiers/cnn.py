@@ -48,6 +48,16 @@ class ThreeLayerConvNet(object):
         # hidden affine layer, and keys 'W3' and 'b3' for the weights and biases   #
         # of the output affine layer.                                              #
         ############################################################################
+        C, H, W = input_dim
+        layers = 3
+        self.param["W1"] = np.random.randn(num_filters, C, filter_size, filter_size) * weight_scale
+        self.param["b1"] = np.zeros(num_filters)
+        W2_input_dim = num_filters * C * filter_size * filter_size
+        self.param["W2"] = np.random.randn(W2_input_dim, hidden_dim)
+        self.param["b2"] = np.zeros(hidden_dim)
+        self.param["W3"] = np.random.randn(hidden_dim, num_classes)
+        self.param["b3"] = np.zeros(num_classes)
+            
         pass
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -80,6 +90,13 @@ class ThreeLayerConvNet(object):
         # computing the class scores for X and storing them in the scores          #
         # variable.                                                                #
         ############################################################################
+        out, cache1 = conv_forward_naive(X, W1, b1, conv_param)
+        out, cache2 = relu_forward(out)
+        out, cache3 = max_pool_forward_naive(out, pool_param)
+        out, cache4 = affine_forward(out, W2, b2)
+        out, cache5 = relu_forward(out)
+        scores, cache6 = affine_forward(out, W3, b3)
+        loos, dx = softmax_loss(scores, y)
         pass
         ############################################################################
         #                             END OF YOUR CODE                             #
